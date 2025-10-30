@@ -14,15 +14,7 @@
 import sys, subprocess
 from importlib.util import find_spec
 
-def ensure(pkgs):
-    to_install = [p for p in pkgs if find_spec(p.split("==")[0]) is None]
-    if to_install:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", *to_install])
 
-ensure([
-    "requests", "beautifulsoup4", "lxml", "readability-lxml",
-    "pandas", "openpyxl", "tqdm", "python-dateutil", "feedparser"
-])
 
 # 2) 임포트
 import re, json, time, random, html
@@ -574,3 +566,4 @@ print("\n=== 저장 완료 ===")
 print(f"- 엑셀 파일: {EXCEL_PATH} (시트명: {sheet_name})")
 print(f"- HTML 코드(txt): {HTML_TXT_PATH}")
 print(f"- 총 기사 수: {len(rows)} (최대 {DAYS*PER_DAY})")
+
