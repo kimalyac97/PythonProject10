@@ -19,6 +19,47 @@ import feedparser
 from dateutil import parser as dateparser
 from dateutil.tz import gettz
 
+def _dir_label(p: str) -> str:
+    try:
+        ap = os.path.abspath(os.path.expanduser(p))
+        base = os.path.basename(ap) or ap
+        return f"{base}  –  {ap}"
+    except Exception:
+        return p
+
+def list_save_dir_options() -> list[tuple[str, str]]:
+    """
+    (label, path) 튜플 리스트 반환.
+    기본 후보 + 현재 작업 디렉토리의 1뎁스 하위 폴더를 합쳐 중복 제거.
+    """
+    base_candidates = [
+        "./outputs",
+        ".",
+        "~/Downloads",
+        "/tmp",
+    ]
+
+    # 현재 폴더의 하위 디렉터리 1뎁스 추가
+    try:
+        for name in os.listdir("."):
+            if os.path.isdir(os.path.join(".", name)):
+                base_candidates.append(os.path.join(".", name))
+    except Exception:
+        pass
+
+    # 중복 제거 + 정규화
+    uniq = []
+    seen = set()
+    for p in base_candidates:
+        ap = os.path.abspath(os.path.expanduser(p))
+        if ap not in seen:
+            seen.add(ap)
+            uniq.append(ap)
+
+    # 라벨 생성
+    options = [(_dir_label(p), p) for p in uniq]
+    return options
+    
 # -------------------- 전역 설정 --------------------
 KST = gettz("Asia/Seoul")
 DEBUG = False
@@ -532,8 +573,25 @@ with left:
         cand_cap = st.number_input("일자별 후보 파싱 상한", 10, 200, 40, 10)
 
     st.markdown("#### 저장 설정")
-    save_dir = st.text_input("저장 폴더 경로", value="./outputs")
-    save_name = st.text_input("저장 파일명(확장자 없이)", value=f"에너지뉴스_{datetime.now(tz=KST).strftime('%Y%m%d_%H%M%S')}")
+    dir_options = list_save_dir_options()
+    dir_labels = [lab for lab, _ in dir_options]
+    
+    # 기본 선택은 ./outputs (없으면 첫 번째 옵션)
+    default_idx = 0
+    for i, (lab, p) in enumerate(dir_options):
+        if os.path.abspath(p) == os.path.abspath(os.path.expanduser("./outputs")):
+            default_idx = i
+            break
+
+    selected_label = st.selectbox("저장 폴더 선택", dir_labels, index=default_idx)
+    # 선택된 경로
+    save_dir = dict(dir_options)[selected_label]
+    
+    save_name = st.text_input(
+        "저장 파일명(확장자 없이)",
+        value=f"에너지뉴스_{datetime.now(tz=KST).strftime('%Y%m%d_%H%M%S')}"
+    )
+
 
     run = st.button("실행", type="primary")
     reset = st.button("초기화")
@@ -684,3 +742,4 @@ if run:
 
 # 항상 최신 로그 보이기
 write_logs()
+
