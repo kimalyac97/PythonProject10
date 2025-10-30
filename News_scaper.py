@@ -608,7 +608,16 @@ if reset:
     st.session_state.logs = []
 
 def write_logs():
-    logs_area.text_area("실시간 로그", value="\n".join(st.session_state.logs[-500:]), height=260)
+    # 이전 로그 위젯 제거(중복 생성 방지)
+    logs_area.empty()
+    # 고유 key 부여로 ID 충돌 방지
+    logs_area.text_area(
+        "실시간 로그",
+        value="\n".join(st.session_state.logs[-500:]),
+        height=260,
+        key="logs_text_area"   # ← 고유 key
+    )
+
 
 # -------------------- 실행 --------------------
 if run:
@@ -742,4 +751,5 @@ if run:
 
 # 항상 최신 로그 보이기
 write_logs()
+
 
