@@ -1,0 +1,9 @@
+streamlit>=1.34
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.1
+readability-lxml>=0.8.1
+feedparser>=6.0
+python-dateutil>=2.9
+pandas>=2.2
+openpyxl>=3.1
