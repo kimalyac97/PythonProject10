@@ -18,6 +18,12 @@ from readability import Document
 import feedparser
 from dateutil import parser as dateparser
 from dateutil.tz import gettz
+from uuid import uuid4
+
+# 세션마다 고유한 로그 위젯 키를 한 번만 만든다
+if "logs_widget_key" not in st.session_state:
+    st.session_state.logs_widget_key = f"logs_text_area_{uuid4().hex}"
+
 
 def _dir_label(p: str) -> str:
     try:
@@ -556,6 +562,27 @@ def build_html_from_rows(rows, sheet_name):
     parts.append("</div>")
     return "".join(parts)
 
+def build_item_html_from_row(r, idx):
+    import html as pyhtml
+    def html_br(n=1): return "<br>"*int(n)
+    def html_p(txt, small=False, bold=False):
+        t = pyhtml.escape(str(txt)).replace("\n","<br>")
+        if bold: t=f"<b>{t}</b>"
+        if small: t=f'<span style="font-size:90%">{t}</span>'
+        return f'<p align="left">{t}</p>'
+    title, url, summary, reporter, d = r[2], r[3], r[4], r[5], r[6]
+    parts=['<div align="">', html_p(f"{idx}. {title}", bold=True), html_br(1)]
+    if url:
+        parts.append(f'<p align="left"><a href="{pyhtml.escape(url,quote=True)}" target="_blank" rel="noopener noreferrer">기사원문</a></p>')
+        parts.append(html_br(1))
+    if summary: parts.append(html_p(summary))
+    if reporter: parts.append(html_p(reporter, small=True, bold=True))
+    if d: parts.append(html_p(d, small=True, bold=True))
+    parts.append("</div>")
+    return "".join(parts)
+
+
+
 # -------------------- GUI (Tk 기능 이식) --------------------
 left, right = st.columns([1.1,1])
 
@@ -608,15 +635,17 @@ if reset:
     st.session_state.logs = []
 
 def write_logs():
-    # 이전 로그 위젯 제거(중복 생성 방지)
-    logs_area.empty()
-    # 고유 key 부여로 ID 충돌 방지
-    logs_area.text_area(
+    # 표시할 로그 문자열
+    text = "\n".join(st.session_state.logs[-500:])
+    # 동일 key로 "한 번만" 렌더됨 (컨테이너를 비우거나 여러 번 만들지 않음)
+    st.text_area(
         "실시간 로그",
-        value="\n".join(st.session_state.logs[-500:]),
+        value=text,
         height=260,
-        key="logs_text_area"   # ← 고유 key
+        key=st.session_state.logs_widget_key,
+        disabled=True
     )
+
 
 
 # -------------------- 실행 --------------------
@@ -692,6 +721,73 @@ if run:
         st.dataframe(df_prev, use_container_width=True, height=380)
     except Exception as e:
         st.warning(f"표 미리보기를 만들 수 없습니다: {e}")
+        # ===== 뉴스 목록 표 + 행 클릭(HTML 코드 보기/다운로드) =====
+    st.subheader("뉴스 목록")
+    
+    # rows -> 표용 DataFrame
+    df_list = pd.DataFrame(
+        [{
+            "순번": r[1],
+            "제목": r[2],
+            "링크": r[3],
+            "세부내용": r[4],
+            "기자": r[5],
+            "일자": r[6],
+        } for r in rows]
+    )
+    
+    # 링크 컬럼을 클릭 가능하게
+    try:
+        st.dataframe(
+            df_list,
+            use_container_width=True,
+            column_config={
+                "링크": st.column_config.LinkColumn("링크"),
+            },
+            hide_index=True,
+            height=420,
+        )
+    except Exception:
+        st.dataframe(df_list, use_container_width=True, hide_index=True, height=420)
+    
+    st.caption("행 우측의 버튼을 눌러 해당 기사 HTML 코드를 확인/다운로드하세요.")
+    
+    # 모달: 코드 미리보기 (HTML 코드 txt로 보여줌)
+    @st.dialog("HTML 코드 미리보기", width="large")
+    def show_code_dialog(item_html, filename):
+        st.code(item_html, language="html")
+        st.download_button(
+            "이 HTML 코드를 .txt로 다운로드",
+            data=item_html.encode("utf-8"),
+            file_name=f"{filename}.txt",
+            mime="text/plain; charset=utf-8",
+            key=f"dl_code_{filename}"
+        )
+    
+    # 행 버튼들
+    for r in rows:
+        idx = r[1]
+        title = r[2] or "(제목 없음)"
+        url = r[3]
+    
+        cA, cB, cC = st.columns([0.62, 0.19, 0.19])
+        with cA:
+            st.write(f"**{idx}. {title}**")
+        with cB:
+            if url:
+                st.link_button("원문 열기", url, use_container_width=True, key=f"open_{idx}")
+            else:
+                st.button("원문 없음", disabled=True, use_container_width=True, key=f"open_na_{idx}")
+        with cC:
+            if st.button("HTML 코드 보기", use_container_width=True, key=f"code_{idx}"):
+                item_html = build_item_html_from_row(r, idx)
+                # 파일명은 '순번_YYYYMMDD_제목앞몇자' 형태
+                safe_title = re.sub(r"[^\w\-가-힣]+", "_", title)[:20] or "no_title"
+                fname = f"{idx}_{datetime.now(tz=KST).strftime('%Y%m%d')}_{safe_title}"
+                show_code_dialog(item_html, fname)
+    
+    st.divider()
+    
 
     # HTML 코드 미리보기(렌더 + 코드)
     st.subheader("전체 HTML 렌더 미리보기")
@@ -751,5 +847,6 @@ if run:
 
 # 항상 최신 로그 보이기
 write_logs()
+
 
 
